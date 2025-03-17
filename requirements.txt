@@ -6,6 +6,7 @@ attr
 brotli
 cchardet
 charset_normalizer
+feedparser
 frozenlist
 gunicorn
 idna_ssl

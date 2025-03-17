@@ -1,3 +1,4 @@
+from kernel.feed_parser import parse_feed  # 添加feed解析器导入
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, \
     filters, InlineQueryHandler, Application, CallbackContext, CallbackQueryHandler
 from telegram import Message, MessageEntity, Update, constants, \
@@ -60,42 +61,69 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message_text = update.message.text.strip()
     args = message_text.split()
 
+    # 1. 参数数量检查
     if len(args) <= 1:
-        # Only /sub command was provided without arguments
-        usage_message = get_message(lang, 'sub_usage')
-        await update.message.reply_text(usage_message)
+        await update.message.reply_text(get_message(lang, 'sub_usage'))
         return
 
+    # 2. 频道名称格式检查
     channel_name = args[1]
     if not channel_name.startswith('@'):
         await update.message.reply_text(get_message(lang, 'sub_channel_format'))
         return
 
-    # Check if the channel exists and if the bot is an admin
     try:
+        # 3. 获取频道信息
         bot = context.bot
-        # Get chat information
         chat = await bot.get_chat(channel_name)
-        # Check if bot is a member and admin in the channel
-        bot_member = await bot.get_chat_member(chat.id, bot.id)
-        logging.info(bot_member)
 
+        # 4. 检查机器人是否是频道管理员
+        bot_member = await bot.get_chat_member(chat.id, bot.id)
         if bot_member.status != ChatMember.ADMINISTRATOR:
             await update.message.reply_text(get_message(lang, 'sub_admin_required', channel_name))
             return
 
-        # If we have enough arguments and the bot is an admin, proceed with subscription
-        if len(args) >= 3:
+        # 5. 获取当前订阅
+        db = get_db()
+        subscriptions = db.get_subscriptions(chat.id)
+
+        # 6. 根据参数数量执行不同操作
+        if len(args) == 2:
+            # 只提供了频道名称，显示当前订阅
+            if subscriptions:
+                url_list = [subscription['feed_url']
+                            for subscription in subscriptions]
+                url_text = "\n".join(url_list)
+                await update.message.reply_text(f"The following URLs are subscribed in {channel_name}:\n{url_text}")
+            else:
+                await update.message.reply_text(f"No subscriptions found in {channel_name}.")
+            return
+
+        elif len(args) >= 3:
+            # 提供了URL，处理订阅
             feed_url = args[2]
 
-            # 添加订阅到数据库
-            db = get_db()
+            # 检查是否已经存在相同订阅
+            existing_sub = next(
+                (sub for sub in subscriptions if sub['feed_url'] == feed_url), None)
+            if existing_sub:
+                await update.message.reply_text(get_message(lang, 'sub_already_exists', channel_name))
+                return
+
+            # 添加新订阅
             subscription_id = db.add_subscription(
                 chat.id, channel_name, feed_url)
-
             await update.message.reply_text(get_message(lang, 'sub_processing'))
-        else:
-            await update.message.reply_text(get_message(lang, 'sub_url_required', channel_name))
+
+            # 解析feed并发送消息到频道
+            try:
+                items = await parse_feed(feed_url)
+                for item in items:
+                    message_text = f"{item.title}\n\n{item.description}\n\nRead more: {item.link}"
+                    await context.bot.send_message(chat_id=chat.id, text=message_text)
+            except Exception as e:
+                logging.error(f"Error parsing or sending feed items: {e}")
+                await update.message.reply_text(get_message(lang, 'sub_feed_error'))
 
     except Exception as e:
         logging.error(f"Error checking channel: {e}")
