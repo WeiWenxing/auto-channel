@@ -2,11 +2,8 @@ import logging
 import os
 import asyncio
 
-from business import telegram_bot
-from business import discord_bot
-
-from config import discord_config
-from config import telegram_config
+from business import telegram_bot, discord_bot
+from kernel.config import discord_config, telegram_config
 
 
 def main():
@@ -33,23 +30,22 @@ def main():
         tasks.append(discord_bot.start_task())
 
     if telegram_token:
-        tasks.append(telegram_bot.start_task())
+        tasks.append(telegram_bot.init_task())
+        tokens = telegram_token.split(",")
+        if len(tokens) >= 1:
+            for tel_token in tokens:
+                tasks.append(telegram_bot.start_task(tel_token))
 
     try:
         loop.run_until_complete(asyncio.gather(*tasks))
+        # loop.call_later(5, asyncio.ensure_future, telegram_bot.scheduled_task())
         loop.run_forever()
     except KeyboardInterrupt:
-        pass
+        logging.info("Ctrl-C close!!")
+        telegram_bot.close_all()
     finally:
         loop.close()
-
-    # if discord_token:
-    #     await asyncio.create_task(discord_bot.start_task())
-    # if telegram_token:
-    #     logging.info(f'telegram token: {telegram_token}')
-    #     await asyncio.create_task(telegram_bot.start_task())
 
 
 if __name__ == '__main__':
     main()
-    # asyncio.run(main())
