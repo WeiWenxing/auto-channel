@@ -1,4 +1,3 @@
-
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, \
     filters, InlineQueryHandler, Application, CallbackContext, CallbackQueryHandler
 from telegram import Message, MessageEntity, Update, constants, \
@@ -15,6 +14,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 tel_bots = []
 commands = [
     BotCommand(command='help', description='Show help message'),
+    BotCommand(command='sub', description='Subscribe to a channel'),
+    BotCommand(command='unsub', description='Unsubscribe from a channel'),
     # BotCommand(command='token', description='please input your replicate token, you should sign up and get your API token: https://replicate.com/account/api-tokens'),
 ]
 
@@ -89,6 +90,49 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(get_message(lang, 'sub_channel_error', channel_name))
 
 
+async def unsub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handles unsubscription command.
+    Checks if the channel exists and if the bot is an admin in the channel.
+    """
+    lang = str(update.message.from_user.language_code)
+    message_text = update.message.text.strip()
+    args = message_text.split()
+
+    if len(args) <= 1:
+        # Only /unsub command was provided without arguments
+        usage_message = get_message(lang, 'unsub_usage')
+        await update.message.reply_text(usage_message)
+        return
+
+    channel_name = args[1]
+    if not channel_name.startswith('@'):
+        await update.message.reply_text(get_message(lang, 'unsub_channel_format'))
+        return
+
+    # Check if the channel exists and if the bot is an admin
+    try:
+        bot = context.bot
+        # Get chat information
+        chat = await bot.get_chat(channel_name)
+        # Check if bot is a member and admin in the channel
+        bot_member = await bot.get_chat_member(chat.id, bot.id)
+
+        if bot_member.status not in [ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
+            await update.message.reply_text(get_message(lang, 'unsub_admin_required', channel_name))
+            return
+
+        # If we have enough arguments and the bot is an admin, proceed with unsubscription
+        if len(args) >= 3:
+            await update.message.reply_text(get_message(lang, 'unsub_processing'))
+        else:
+            await update.message.reply_text(get_message(lang, 'unsub_url_required', channel_name))
+
+    except Exception as e:
+        logging.error(f"Error checking channel: {e}")
+        await update.message.reply_text(get_message(lang, 'unsub_channel_error', channel_name))
+
+
 async def run(token):
     """
     Runs the bot indefinitely until the user presses Ctrl+C
@@ -109,6 +153,7 @@ async def run(token):
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', help))
     application.add_handler(CommandHandler('sub', sub))
+    application.add_handler(CommandHandler('unsub', unsub))
 
     await application.initialize()
     await application.start()
