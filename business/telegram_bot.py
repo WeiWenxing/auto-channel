@@ -42,8 +42,11 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     Shows the help menu.
     """
     lang = str(update.message.from_user.language_code)
-    help_text = get_message(lang, 'help_greeting',
-                            update.message.from_user.first_name)
+
+    # Use existing usage strings
+    help_text = get_message(lang, 'sub_usage')
+    help_text += "\n" + get_message(lang, 'unsub_usage')
+
     await update.message.reply_text(help_text, disable_web_page_preview=True)
 
 
@@ -119,7 +122,7 @@ async def unsub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Check if bot is a member and admin in the channel
         bot_member = await bot.get_chat_member(chat.id, bot.id)
 
-        if bot_member.status not in [ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
+        if bot_member.status != ChatMember.ADMINISTRATOR:
             await update.message.reply_text(get_message(lang, 'unsub_admin_required', channel_name))
             return
 
