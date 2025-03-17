@@ -3,7 +3,8 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 from telegram import Message, MessageEntity, Update, constants, \
     BotCommand, ChatMember, InlineKeyboardButton, InlineKeyboardMarkup
 from kernel.lang_config import get_message
-from kernel.config import telegram_config
+from kernel.config import telegram_config, db_config
+from kernel.db_manager import init_db, get_db
 import re
 import logging
 import sys
@@ -85,6 +86,13 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # If we have enough arguments and the bot is an admin, proceed with subscription
         if len(args) >= 3:
+            feed_url = args[2]
+
+            # 添加订阅到数据库
+            db = get_db()
+            subscription_id = db.add_subscription(
+                chat.id, channel_name, feed_url)
+
             await update.message.reply_text(get_message(lang, 'sub_processing'))
         else:
             await update.message.reply_text(get_message(lang, 'sub_url_required', channel_name))
@@ -128,7 +136,16 @@ async def unsub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # If we have enough arguments and the bot is an admin, proceed with unsubscription
         if len(args) >= 3:
-            await update.message.reply_text(get_message(lang, 'unsub_processing'))
+            feed_url = args[2]
+
+            # 从数据库中删除订阅
+            db = get_db()
+            success = db.remove_subscription(chat.id, feed_url)
+
+            if success:
+                await update.message.reply_text(get_message(lang, 'unsub_processing'))
+            else:
+                await update.message.reply_text(get_message(lang, 'unsub_not_found'))
         else:
             await update.message.reply_text(get_message(lang, 'unsub_url_required', channel_name))
 
@@ -169,6 +186,10 @@ async def init_task():
     """|coro|
     以异步方式启动
     """
+    # 初始化数据库连接
+    init_db(db_config['host'], db_config['user'],
+            db_config['password'], db_config['database'])
+    logging.info("Database initialized")
     logging.info("init vars and sd_webui end")
 
 
@@ -177,4 +198,9 @@ async def start_task(token):
 
 
 def close_all():
+    # 关闭数据库连接
+    try:
+        get_db().close()
+    except Exception as e:
+        logging.error(f"Error closing database: {e}")
     logging.info("db close")
