@@ -74,8 +74,9 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat = await bot.get_chat(channel_name)
         # Check if bot is a member and admin in the channel
         bot_member = await bot.get_chat_member(chat.id, bot.id)
+        logging.info(bot_member)
 
-        if bot_member.status not in [ChatMember.ADMINISTRATOR, ChatMember.CREATOR]:
+        if bot_member.status != ChatMember.ADMINISTRATOR:
             await update.message.reply_text(get_message(lang, 'sub_admin_required', channel_name))
             return
 
