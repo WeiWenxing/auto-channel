@@ -1,12 +1,13 @@
 from kernel.feed_parser import parse_feed  # 添加feed解析器导入
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, \
     filters, InlineQueryHandler, Application, CallbackContext, CallbackQueryHandler
-from telegram import Message, MessageEntity, Update, constants, \
+from telegram import Message, MessageEntity, Update, constants, InputMediaPhoto, \
     BotCommand, ChatMember, InlineKeyboardButton, InlineKeyboardMarkup
 from kernel.lang_config import get_message
 from kernel.config import telegram_config, db_config
 from kernel.db_manager import init_db, get_db
 import re
+import asyncio
 import logging
 import sys
 import os
@@ -119,8 +120,36 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             try:
                 items = await parse_feed(feed_url)
                 for item in items:
-                    message_text = f"{item.title}\n\n{item.description}\n\nRead more: {item.link}"
-                    await context.bot.send_message(chat_id=chat.id, text=message_text)
+                    # 发送标题和链接
+                    title_message = f"{item.title}\n\nRead more: {item.link}"
+                    # 添加35秒延迟以避免触发flood control
+                    await context.bot.send_message(chat_id=chat.id, text=title_message)
+                    await asyncio.sleep(35)
+
+                    # 处理description中的图片
+                    if item.description:
+                        # 提取所有图片链接
+                        import re
+                        image_urls = re.findall(
+                            r'<img[^>]+src="([^">]+)"', item.description)
+
+                        # 每10张图片为一组发送
+                        for i in range(0, len(image_urls), 10):
+                            group = image_urls[i:i+10]
+                            media_group = [InputMediaPhoto(
+                                media=url) for url in group]
+                            try:
+                                await context.bot.send_media_group(chat_id=chat.id, media=media_group)
+                                # 添加35秒延迟以避免触发flood control
+                                await asyncio.sleep(35)
+                            except Exception as e:
+                                logging.error(
+                                    f"Error sending image group: {e}")
+                                # await context.bot.send_message(chat_id=chat.id, text=f"Failed to send some images: {str(e)}")
+                                # 如果遇到flood control错误，等待35秒
+                                if "Flood control exceeded" in str(e):
+                                    await asyncio.sleep(35)
+
             except Exception as e:
                 logging.error(f"Error parsing or sending feed items: {e}")
                 await update.message.reply_text(get_message(lang, 'sub_feed_error'))
