@@ -135,7 +135,7 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 # 从后往前遍历items
                 for item in reversed(items):
                     # 获取item的pubDate时间戳
-                    item_timestamp = pubdate_to_timestamp(item.pubDate)
+                    item_timestamp = item.pubDate ## pubdate_to_timestamp(item.pubDate)
 
                     # 如果item的时间早于或等于上次更新时间，跳过
                     if item_timestamp <= last_updated:
@@ -161,8 +161,10 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                                 media=media_group,
                                 caption=f"{item.title}\n\nRead more: {item.link}\n#{first_word}"
                             )
+                            # Convert timestamp to datetime object
+                            updated_at = datetime.fromtimestamp(item_timestamp)
                             db.update_subscription_timestamp(
-                                subscription_id, item_timestamp)
+                                subscription_id, updated_at)
                             # 添加35秒延迟以避免触发flood control
                             await asyncio.sleep(35)
                         except Exception as e:
