@@ -190,6 +190,30 @@ class DBManager:
         finally:
             cursor.close()
 
+    def get_subscription_timestamp(self, channel_id: int, feed_url: str) -> Optional[datetime]:
+        """
+        获取指定频道和feed_url的更新时间戳
+
+        Args:
+            channel_id: Telegram 频道 ID
+            feed_url: 订阅的 URL
+
+        Returns:
+            datetime: 更新时间戳，如果不存在返回None
+        """
+        self.ensure_connection()
+        cursor = self.conn.cursor()
+
+        try:
+            cursor.execute(
+                "SELECT updated_at FROM channel_subscriptions WHERE channel_id = %s AND feed_url = %s",
+                (channel_id, feed_url)
+            )
+            result = cursor.fetchone()
+            return result[0] if result else None
+        finally:
+            cursor.close()
+
     def close(self):
         """
         关闭数据库连接

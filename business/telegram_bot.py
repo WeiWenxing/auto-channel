@@ -1,16 +1,21 @@
-from kernel.feed_parser import parse_feed  # 添加feed解析器导入
+
+
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, \
     filters, InlineQueryHandler, Application, CallbackContext, CallbackQueryHandler
 from telegram import Message, MessageEntity, Update, constants, InputMediaPhoto, \
     BotCommand, ChatMember, InlineKeyboardButton, InlineKeyboardMarkup
+from datetime import datetime
 from kernel.lang_config import get_message
 from kernel.config import telegram_config, db_config
 from kernel.db_manager import init_db, get_db
+from kernel.feed_parser import parse_feed
+from kernel.utils import pubdate_to_timestamp
 import re
 import asyncio
 import logging
 import sys
 import os
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -119,8 +124,23 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # 解析feed并发送消息到频道
             try:
                 items = await parse_feed(feed_url)
+
+                # 获取当前订阅的updated_at时间戳
+                last_updated = db.get_subscription_timestamp(chat.id, feed_url)
+                if last_updated is None:
+                    last_updated = datetime.fromtimestamp(0)
+                else:
+                    last_updated = last_updated.timestamp()
+
                 # 从后往前遍历items
                 for item in reversed(items):
+                    # 获取item的pubDate时间戳
+                    item_timestamp = pubdate_to_timestamp(item.pubDate)
+
+                    # 如果item的时间早于或等于上次更新时间，跳过
+                    if item_timestamp <= last_updated:
+                        continue
+
                     # 处理description中的图片
                     if item.description:
                         # 提取所有图片链接
@@ -133,13 +153,16 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
                         try:
                             # 获取title的第一个单词，如果title为空则使用"美人图"
-                            first_word = item.title.split()[0] if item.title and len(item.title.split()) > 0 else "美人图"
+                            first_word = item.title.split()[0] if item.title and len(
+                                item.title.split()) > 0 else "美人图"
                             # 直接传递caption参数，将#first_word放在最后一行
                             await context.bot.send_media_group(
                                 chat_id=chat.id,
                                 media=media_group,
                                 caption=f"{item.title}\n\nRead more: {item.link}\n#{first_word}"
                             )
+                            db.update_subscription_timestamp(
+                                subscription_id, item_timestamp)
                             # 添加35秒延迟以避免触发flood control
                             await asyncio.sleep(35)
                         except Exception as e:
