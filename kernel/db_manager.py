@@ -57,22 +57,10 @@ class DBManager:
             channel_id BIGINT NOT NULL,
             channel_name VARCHAR(255) NOT NULL,
             feed_url VARCHAR(512) NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at DATETIME NOT NULL,
             updated_at DATETIME NOT NULL,
             UNIQUE KEY unique_channel_feed (channel_id, feed_url)
-        )
-        ''')
-        
-        # 创建已发送消息记录表
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sent_messages (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            subscription_id INT NOT NULL,
-            message_id VARCHAR(255) NOT NULL,
-            published_at DATETIME,
-            sent_at DATETIME NOT NULL,
-            UNIQUE KEY unique_message (subscription_id, message_id),
-            FOREIGN KEY (subscription_id) REFERENCES channel_subscriptions(id) ON DELETE CASCADE
         )
         ''')
         
@@ -105,9 +93,9 @@ class DBManager:
             existing = cursor.fetchone()
             
             if existing:
-                # 更新已存在的订阅
+                # 更新已存在的订阅，将is_active设为True
                 cursor.execute(
-                    "UPDATE channel_subscriptions SET updated_at = %s WHERE id = %s",
+                    "UPDATE channel_subscriptions SET is_active = TRUE, updated_at = %s WHERE id = %s",
                     (now, existing[0])
                 )
                 self.conn.commit()
@@ -125,22 +113,24 @@ class DBManager:
 
     def remove_subscription(self, channel_id: int, feed_url: str) -> bool:
         """
-        删除频道订阅
+        取消订阅
         
         Args:
             channel_id: Telegram 频道 ID
             feed_url: 订阅的 URL
             
         Returns:
-            success: 是否成功删除
+            success: 是否成功取消订阅
         """
         self.ensure_connection()
         cursor = self.conn.cursor()
+        now = datetime.now()
         
         try:
+            # 将is_active设为False而不是删除记录
             cursor.execute(
-                "DELETE FROM channel_subscriptions WHERE channel_id = %s AND feed_url = %s",
-                (channel_id, feed_url)
+                "UPDATE channel_subscriptions SET is_active = FALSE, updated_at = %s WHERE channel_id = %s AND feed_url = %s",
+                (now, channel_id, feed_url)
             )
             self.conn.commit()
             return cursor.rowcount > 0
@@ -163,65 +153,13 @@ class DBManager:
         try:
             if channel_id:
                 cursor.execute(
-                    "SELECT * FROM channel_subscriptions WHERE channel_id = %s",
+                    "SELECT * FROM channel_subscriptions WHERE channel_id = %s AND is_active = TRUE",
                     (channel_id,)
                 )
             else:
-                cursor.execute("SELECT * FROM channel_subscriptions")
+                cursor.execute("SELECT * FROM channel_subscriptions WHERE is_active = TRUE")
                 
             return cursor.fetchall()
-        finally:
-            cursor.close()
-
-    def record_sent_message(self, subscription_id: int, message_id: str, published_at: Optional[datetime] = None) -> int:
-        """
-        记录已发送的消息
-        
-        Args:
-            subscription_id: 订阅 ID
-            message_id: 消息唯一标识符
-            published_at: 消息发布时间
-            
-        Returns:
-            record_id: 记录 ID
-        """
-        self.ensure_connection()
-        cursor = self.conn.cursor()
-        now = datetime.now()
-        
-        try:
-            cursor.execute(
-                "INSERT INTO sent_messages (subscription_id, message_id, published_at, sent_at) VALUES (%s, %s, %s, %s)",
-                (subscription_id, message_id, published_at, now)
-            )
-            self.conn.commit()
-            return cursor.lastrowid
-        except mysql.connector.IntegrityError:
-            # 消息已经发送过，忽略
-            return 0
-        finally:
-            cursor.close()
-
-    def is_message_sent(self, subscription_id: int, message_id: str) -> bool:
-        """
-        检查消息是否已发送
-        
-        Args:
-            subscription_id: 订阅 ID
-            message_id: 消息唯一标识符
-            
-        Returns:
-            is_sent: 消息是否已发送
-        """
-        self.ensure_connection()
-        cursor = self.conn.cursor()
-        
-        try:
-            cursor.execute(
-                "SELECT id FROM sent_messages WHERE subscription_id = %s AND message_id = %s",
-                (subscription_id, message_id)
-            )
-            return cursor.fetchone() is not None
         finally:
             cursor.close()
 
