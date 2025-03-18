@@ -153,9 +153,14 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             media=url) for url in image_urls[:10]]
 
                         try:
-                            # 获取title的第一个单词，如果title为空则使用"美人图"
-                            first_word = item.title.split()[0] if item.title and len(
-                                item.title.split()) > 0 else "美人图"
+                            # 获取title的第一个有效单词，支持汉字和日语字符
+                            first_word = "美人图"  # 默认值
+                            if item.title:
+                                # 使用正则表达式匹配第一个包含汉字、日语或字母数字的单词
+                                match = re.search(r'[\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FFa-zA-Z0-9]+', item.title)
+                                if match:
+                                    first_word = match.group(0)
+
                             # 直接传递caption参数，将#first_word放在最后一行
                             await context.bot.send_media_group(
                                 chat_id=chat.id,
