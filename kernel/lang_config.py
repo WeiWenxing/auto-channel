@@ -13,7 +13,9 @@ MESSAGES = {
         'unsub_processing': 'Processing unsubscription...',
         'unsub_url_required': 'Please provide a URL. Format: /unsub {} url',
         'unsub_channel_error': 'Could not access {}. Make sure the channel exists and the bot is its administrator.',
-        'unsub_not_found': 'No subscription found for this URL in the channel.'
+        'unsub_not_found': 'No subscription found for this URL in the channel.',
+        'sub_end': 'Sent message to {0} end',
+        'sub_fail': 'Failed to send message: {0}'
     },
     'zh': {
         'sub_usage': '/sub @频道名称 url',
@@ -29,7 +31,9 @@ MESSAGES = {
         'unsub_processing': '正在处理取消订阅...',
         'unsub_url_required': '请提供URL。格式：/unsub {} url',
         'unsub_channel_error': '无法访问{}。请确保频道存在且机器人是其管理员',
-        'unsub_not_found': '在频道中未找到此URL的订阅。'
+        'unsub_not_found': '在频道中未找到此URL的订阅。',
+        'sub_end': '向{0}发送消息结束',
+        'sub_fail': '发送消息失败: {0}'
     }
 }
 

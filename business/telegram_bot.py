@@ -135,7 +135,8 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 # 从后往前遍历items
                 for item in reversed(items):
                     # 获取item的pubDate时间戳
-                    item_timestamp = item.pubDate ## pubdate_to_timestamp(item.pubDate)
+                    # pubdate_to_timestamp(item.pubDate)
+                    item_timestamp = item.pubDate
 
                     # 如果item的时间早于或等于上次更新时间，跳过
                     if item_timestamp <= last_updated:
@@ -169,10 +170,14 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             await asyncio.sleep(35)
                         except Exception as e:
                             logging.error(f"Error sending image group: {e}")
+                            # 发送失败消息
+                            await update.message.reply_text(get_message(lang, 'sub_fail', f"error: {e}"))
                             # 如果遇到flood control错误，等待35秒
                             if "Flood control exceeded" in str(e):
                                 await asyncio.sleep(35)
 
+                # 发送结束消息
+                await update.message.reply_text(get_message(lang, 'sub_end', channel_name))
             except Exception as e:
                 logging.error(f"Error parsing or sending feed items: {e}")
                 await update.message.reply_text(get_message(lang, 'sub_feed_error'))
