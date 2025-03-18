@@ -119,36 +119,32 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # 解析feed并发送消息到频道
             try:
                 items = await parse_feed(feed_url)
-                for item in items:
-                    # 发送标题和链接
-                    title_message = f"{item.title}\n\nRead more: {item.link}"
-                    # 添加35秒延迟以避免触发flood control
-                    await context.bot.send_message(chat_id=chat.id, text=title_message)
-                    await asyncio.sleep(35)
-
+                # 从后往前遍历items
+                for item in reversed(items):
                     # 处理description中的图片
                     if item.description:
                         # 提取所有图片链接
-                        import re
                         image_urls = re.findall(
                             r'<img[^>]+src="([^">]+)"', item.description)
 
-                        # 每10张图片为一组发送
-                        for i in range(0, len(image_urls), 10):
-                            group = image_urls[i:i+10]
-                            media_group = [InputMediaPhoto(
-                                media=url) for url in group]
-                            try:
-                                await context.bot.send_media_group(chat_id=chat.id, media=media_group)
-                                # 添加35秒延迟以避免触发flood control
+                        # 只取前10张图片
+                        media_group = [InputMediaPhoto(
+                            media=url) for url in image_urls[:10]]
+
+                        try:
+                            # 直接传递caption参数
+                            await context.bot.send_media_group(
+                                chat_id=chat.id,
+                                media=media_group,
+                                caption=f"{item.title}\n\nRead more: {item.link}"
+                            )
+                            # 添加35秒延迟以避免触发flood control
+                            await asyncio.sleep(35)
+                        except Exception as e:
+                            logging.error(f"Error sending image group: {e}")
+                            # 如果遇到flood control错误，等待35秒
+                            if "Flood control exceeded" in str(e):
                                 await asyncio.sleep(35)
-                            except Exception as e:
-                                logging.error(
-                                    f"Error sending image group: {e}")
-                                # await context.bot.send_message(chat_id=chat.id, text=f"Failed to send some images: {str(e)}")
-                                # 如果遇到flood control错误，等待35秒
-                                if "Flood control exceeded" in str(e):
-                                    await asyncio.sleep(35)
 
             except Exception as e:
                 logging.error(f"Error parsing or sending feed items: {e}")
