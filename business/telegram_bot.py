@@ -132,11 +132,13 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             media=url) for url in image_urls[:10]]
 
                         try:
-                            # 直接传递caption参数
+                            # 获取title的第一个单词，如果title为空则使用"美人图"
+                            first_word = item.title.split()[0] if item.title and len(item.title.split()) > 0 else "美人图"
+                            # 直接传递caption参数，将#first_word放在最后一行
                             await context.bot.send_media_group(
                                 chat_id=chat.id,
                                 media=media_group,
-                                caption=f"{item.title}\n\nRead more: {item.link}"
+                                caption=f"{item.title}\n\nRead more: {item.link}\n#{first_word}"
                             )
                             # 添加35秒延迟以避免触发flood control
                             await asyncio.sleep(35)
