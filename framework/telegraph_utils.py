@@ -9,6 +9,7 @@ import requests
 import re
 from telegraph import Telegraph
 from kernel.config import telegraph_config, telegram_config
+from kernel.feed_parser import FeedItem
 
 # 从配置中获取 TELEGRAPH_ACCESS_TOKEN
 access_token = telegraph_config.get('access_token')
@@ -80,7 +81,7 @@ def publish_rss_item(item, author_name, author_url):
             telegraph_image_urls.append(telegraph_img_url)
 
     # 构建文章内容，仅包含上传后图片新地址列表
-    content = f"<p>发布日期: {pub_date}</p>"
+    content = ""
     for img_url in telegraph_image_urls:
         content += f'<img src="{img_url}" />'
 
@@ -109,11 +110,12 @@ if __name__ == "__main__":
         print(f"使用配置中的 access_token: {access_token}")
 
         # 示例 RSS item
-        rss_item = {
-            'title': '测试文章标题',
-            'description': '<p>这是一篇测试文章的内容。<img src="https://cosplaytele.com/wp-content/uploads/2024/12/Yaokoututu-cosplay-Yumeko-Jabami-Kakegurui-11_result.webp" /><img src="https://api.telegram.org/file/bot8059309415:AAG1AtU_5DibM3PN79eTi8cqCk-hE1OEaqU/photos/file_1.jpg" /></p>',
-            'pubDate': '2025-03-20'
-        }
+        rss_item = FeedItem(
+            title='测试文章标题',
+            description='<p>这是一篇测试文章的内容。<img src="https://cosplaytele.com/wp-content/uploads/2024/12/Yaokoututu-cosplay-Yumeko-Jabami-Kakegurui-11_result.webp" /><img src="https://api.telegram.org/file/bot8059309415:AAG1AtU_5DibM3PN79eTi8cqCk-hE1OEaqU/photos/file_1.jpg" /></p>',
+            pubDate=0,
+            link='https://t.me/'
+        )
 
         page_link, page_id = publish_rss_item(rss_item, "Default", "https://t.me")
         print(f"文章已发布到 Telegraph，链接为: {page_link}，页面 ID 为: {page_id}")
