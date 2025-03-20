@@ -18,3 +18,8 @@ db_config = {
     'password': os.environ.get('MYSQL_PASS', ''),
     'database': os.environ.get('MYSQL_DATABASE', 'telegram_bot'),
 }
+
+# Telegraph 配置
+telegraph_config = {
+    'access_token': os.environ.get('TELEGRAPH_ACCESS_TOKEN', '')
+}
