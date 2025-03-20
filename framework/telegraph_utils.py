@@ -111,30 +111,30 @@ if __name__ == "__main__":
         # 示例 RSS item
         rss_item = {
             'title': '测试文章标题',
-            'description': '<p>这是一篇测试文章的内容。<img src="https://cosplaytele.com/wp-content/uploads/2024/12/Yaokoututu-cosplay-Yumeko-Jabami-Kakegurui-11_result.webp" /><img src="https://y.gtimg.cn/music/photo_new/T053M000001ME2bp095ikV.jpg" /></p>',
+            'description': '<p>这是一篇测试文章的内容。<img src="https://cosplaytele.com/wp-content/uploads/2024/12/Yaokoututu-cosplay-Yumeko-Jabami-Kakegurui-11_result.webp" /><img src="https://api.telegram.org/file/bot8059309415:AAG1AtU_5DibM3PN79eTi8cqCk-hE1OEaqU/photos/file_1.jpg" /></p>',
             'pubDate': '2025-03-20'
         }
 
-        # page_link, page_id = publish_rss_item(rss_item, "Default", "https://t.me")
-        # print(f"文章已发布到 Telegraph，链接为: {page_link}，页面 ID 为: {page_id}")
+        page_link, page_id = publish_rss_item(rss_item, "Default", "https://t.me")
+        print(f"文章已发布到 Telegraph，链接为: {page_link}，页面 ID 为: {page_id}")
 
-        telegram_token = str(telegram_config['token'])
-        url = f"https://api.telegram.org/bot{telegram_token}/sendPhoto"
-        params = {
-            "chat_id": "7266351024",
-            "photo": "https://y.gtimg.cn/music/photo_new/T053M000001ME2bp095ikV.jpg",
-            "caption": "This is a sample image"
-        }
-        response = requests.post(url, data=params)
-        response_info = response.json()
-        print(response_info)
-        # 获取第一个图片的 file_id
-        first_file_id = response_info['result']['photo'][-1]['file_id']
-        print(first_file_id)
+        # telegram_token = str(telegram_config['token'])
+        # url = f"https://api.telegram.org/bot{telegram_token}/sendPhoto"
+        # params = {
+        #     "chat_id": "7266351024",
+        #     "photo": "https://y.gtimg.cn/music/photo_new/T053M000001ME2bp095ikV.jpg",
+        #     "caption": "This is a sample image"
+        # }
+        # response = requests.post(url, data=params)
+        # response_info = response.json()
+        # print(response_info)
+        # # 获取第一个图片的 file_id
+        # first_file_id = response_info['result']['photo'][-1]['file_id']
+        # print(first_file_id)
 
-        # 获取文件的下载路径
-        file_path = get_file_path(first_file_id, telegram_token)
-        real_url = f"https://api.telegram.org/file/bot{telegram_token}/{file_path}"
+        # # 获取文件的下载路径
+        # file_path = get_file_path(first_file_id, telegram_token)
+        # real_url = f"https://api.telegram.org/file/bot{telegram_token}/{file_path}"
 
-        print(real_url)
+        # print(real_url)
 

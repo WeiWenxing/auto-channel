@@ -9,7 +9,7 @@ from kernel.lang_config import get_message
 from kernel.config import telegram_config, db_config
 from kernel.db_manager import init_db, get_db
 from kernel.feed_parser import parse_feed
-from kernel.utils import pubdate_to_timestamp
+from framework.telegraph_utils import publish_rss_item
 import re
 import asyncio
 import logging
@@ -148,39 +148,50 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         image_urls = re.findall(
                             r'<img[^>]+src="([^">]+)"', item.description)
 
-                        # 只取前10张图片
-                        media_group = [InputMediaPhoto(
-                            media=url) for url in image_urls[:10]]
+                        # 先发一条单独的消息，只包含标题和链接
+                        first_word = "美人图"  # 默认值
+                        if item.title:
+                            # 使用正则表达式匹配第一个包含汉字、日语或字母数字的单词
+                            match = re.search(
+                                r'[\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FFa-zA-Z0-9]+', item.title)
+                            if match:
+                                first_word = match.group(0)
 
-                        try:
-                            # 获取title的第一个有效单词，支持汉字和日语字符
-                            first_word = "美人图"  # 默认值
-                            if item.title:
-                                # 使用正则表达式匹配第一个包含汉字、日语或字母数字的单词
-                                match = re.search(r'[\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FFa-zA-Z0-9]+', item.title)
-                                if match:
-                                    first_word = match.group(0)
+                        # 发布到Telegraph
+                        logging.info(f"chat.title: {chat.title}, chat.url: {chat.url}")
+                        page_link, _ = publish_rss_item(item, chat.title, chat.url)
+                        logging.info(f"page_link: {page_link}")
 
-                            # 直接传递caption参数，将#first_word放在最后一行
-                            await context.bot.send_media_group(
-                                chat_id=chat.id,
-                                media=media_group,
-                                caption=f"{item.title}\n\nRead more: {item.link}\n#{first_word}"
-                            )
-                            # Convert timestamp to datetime object
-                            updated_at = datetime.fromtimestamp(item_timestamp)
-                            db.update_subscription_timestamp(
-                                subscription_id, updated_at)
-                            # 添加35秒延迟以避免触发flood control
-                            await asyncio.sleep(35)
-                        except Exception as e:
-                            logging.error(f"Error sending image group: {e}")
-                            # 发送失败消息
-                            await update.message.reply_text(get_message(lang, 'sub_fail', f"error: {e}"))
-                            # 如果遇到flood control错误，等待35秒
-                            if "Flood control exceeded" in str(e):
+                        # 发送标题和链接
+                        await context.bot.send_message(
+                            chat_id=chat.id,
+                            text=f"{item.title}\n\nRead more: {page_link}\n#{first_word}"
+                        )
+
+                        # 每10张图片组成一个消息
+                        for i in range(0, len(image_urls), 10):
+                            media_group = [InputMediaPhoto(
+                                media=url) for url in image_urls[i:i+10]]
+                            try:
+                                messages = await context.bot.send_media_group(
+                                    chat_id=chat.id,
+                                    media=media_group
+                                )
+                                # 添加35秒延迟以避免触发flood control
                                 await asyncio.sleep(35)
+                            except Exception as e:
+                                logging.error(
+                                    f"Error sending image group: {e}")
+                                # 发送失败消息
+                                await update.message.reply_text(get_message(lang, 'sub_fail', f"error: {e}"))
+                                # 如果遇到flood control错误，等待35秒
+                                if "Flood control exceeded" in str(e):
+                                    await asyncio.sleep(35)
 
+                    # 更新数据库中的updated_at时间戳
+                    updated_at = datetime.fromtimestamp(item_timestamp)
+                    db.update_subscription_timestamp(
+                        subscription_id, updated_at)
                 # 发送结束消息
                 await update.message.reply_text(get_message(lang, 'sub_end', channel_name))
             except Exception as e:
