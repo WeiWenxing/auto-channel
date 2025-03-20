@@ -67,9 +67,9 @@ def publish_rss_item(item, author_name, author_url):
     :param item: RSS Feed 中的单个 item，包含标题、描述、发布日期等
     :return: 页面的链接和页面 ID
     """
-    title = item.get('title', '无标题文章')
-    description = item.get('description', '')
-    pub_date = item.get('pubDate', '')
+    title = item.title
+    description = item.description
+    pub_date = item.pubDate
 
     # 解析描述中的图片地址
     image_urls = re.findall(r'<img[^>]+src="([^">]+)"', description)

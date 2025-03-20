@@ -81,7 +81,9 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         # 3. 获取频道信息
         bot = context.bot
+        logging.info(channel_name)
         chat = await bot.get_chat(channel_name)
+        logging.info(chat)
 
         # 4. 检查机器人是否是频道管理员
         bot_member = await bot.get_chat_member(chat.id, bot.id)
@@ -158,18 +160,21 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                                 first_word = match.group(0)
 
                         # 发布到Telegraph
-                        logging.info(f"chat.title: {chat.title}, chat.url: {chat.url}")
-                        page_link, _ = publish_rss_item(item, chat.title, chat.url)
+                        url = f"https://t.me/{chat.username}"
+                        logging.info(f"chat.title: {chat.title}, chat.url: {url}")
+                        page_link, _ = publish_rss_item(item, chat.title, url)
                         logging.info(f"page_link: {page_link}")
 
                         # 发送标题和链接
                         await context.bot.send_message(
                             chat_id=chat.id,
-                            text=f"{item.title}\n\nRead more: {page_link}\n#{first_word}"
+                            text=f"{item.title}\n\n{page_link}\n#{first_word}"
                         )
+                        await asyncio.sleep(5)
 
                         # 每10张图片组成一个消息
                         for i in range(0, len(image_urls), 10):
+                            break
                             media_group = [InputMediaPhoto(
                                 media=url) for url in image_urls[i:i+10]]
                             try:
