@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+import re
 
 def pubdate_to_timestamp(pubdate_str: str) -> float:
     """
@@ -21,3 +22,11 @@ def pubdate_to_timestamp(pubdate_str: str) -> float:
     except Exception as e:
         logging.error(f"Error parsing pubDate: {e}")
         return 0.0
+
+def generate_chinese_tags(title):
+    # 使用正则表达式匹配所有的中文部分
+    chinese_parts = re.findall(r'[\u4e00-\u9fa5]+', title)
+    # 为每个中文部分添加 # 符号
+    tags = [f"#{part}" for part in chinese_parts]
+    # 将标签用空格连接成字符串
+    return " ".join(tags)

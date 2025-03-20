@@ -9,6 +9,7 @@ from kernel.lang_config import get_message
 from kernel.config import telegram_config, db_config
 from kernel.db_manager import init_db, get_db
 from kernel.feed_parser import parse_feed
+from kernel.utils import generate_chinese_tags
 from framework.telegraph_utils import publish_rss_item
 import re
 import asyncio
@@ -115,94 +116,22 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             existing_sub = next(
                 (sub for sub in subscriptions if sub['feed_url'] == feed_url), None)
             if existing_sub:
+                subscription = existing_sub
                 await update.message.reply_text(get_message(lang, 'sub_already_exists', channel_name))
-                return
-
-            # 添加新订阅
-            subscription_id = db.add_subscription(
-                chat.id, channel_name, feed_url)
+            else:
+                subscription_id = db.add_subscription(
+                    chat.id, channel_name, feed_url)
+                subscription = next(
+                    (sub for sub in db.get_subscriptions() if sub['id'] == subscription_id), None)
             await update.message.reply_text(get_message(lang, 'sub_processing'))
 
-            # 解析feed并发送消息到频道
+            # 处理订阅
             try:
-                items = await parse_feed(feed_url)
-
-                # 获取当前订阅的updated_at时间戳
-                last_updated = db.get_subscription_timestamp(chat.id, feed_url)
-                if last_updated is None:
-                    last_updated = datetime.fromtimestamp(0)
-                else:
-                    last_updated = last_updated.timestamp()
-
-                # 从后往前遍历items
-                for item in reversed(items):
-                    # 获取item的pubDate时间戳
-                    # pubdate_to_timestamp(item.pubDate)
-                    item_timestamp = item.pubDate
-
-                    # 如果item的时间早于或等于上次更新时间，跳过
-                    if item_timestamp <= last_updated:
-                        continue
-
-                    # 处理description中的图片
-                    if item.description:
-                        # 提取所有图片链接
-                        image_urls = re.findall(
-                            r'<img[^>]+src="([^">]+)"', item.description)
-
-                        # 先发一条单独的消息，只包含标题和链接
-                        first_word = "美人图"  # 默认值
-                        if item.title:
-                            # 使用正则表达式匹配第一个包含汉字、日语或字母数字的单词
-                            match = re.search(
-                                r'[\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FFa-zA-Z0-9]+', item.title)
-                            if match:
-                                first_word = match.group(0)
-
-                        # 发布到Telegraph
-                        url = f"https://t.me/{chat.username}"
-                        logging.info(f"chat.title: {chat.title}, chat.url: {url}")
-                        page_link, _ = publish_rss_item(item, chat.title, url)
-                        logging.info(f"page_link: {page_link}")
-
-                        # 发送标题和链接
-                        await context.bot.send_message(
-                            chat_id=chat.id,
-                            text=f"{item.title}\n\n{page_link}\n#{first_word}"
-                        )
-                        await asyncio.sleep(5)
-
-                        # 每10张图片组成一个消息
-                        for i in range(0, len(image_urls), 10):
-                            break
-                            media_group = [InputMediaPhoto(
-                                media=url) for url in image_urls[i:i+10]]
-                            try:
-                                messages = await context.bot.send_media_group(
-                                    chat_id=chat.id,
-                                    media=media_group
-                                )
-                                # 添加35秒延迟以避免触发flood control
-                                await asyncio.sleep(35)
-                            except Exception as e:
-                                logging.error(
-                                    f"Error sending image group: {e}")
-                                # 发送失败消息
-                                await update.message.reply_text(get_message(lang, 'sub_fail', f"error: {e}"))
-                                # 如果遇到flood control错误，等待35秒
-                                if "Flood control exceeded" in str(e):
-                                    await asyncio.sleep(35)
-
-                    # 更新数据库中的updated_at时间戳
-                    updated_at = datetime.fromtimestamp(item_timestamp)
-                    db.update_subscription_timestamp(
-                        subscription_id, updated_at)
-                # 发送结束消息
-                await update.message.reply_text(get_message(lang, 'sub_end', channel_name))
+                await process_sub(context.bot, subscription)
             except Exception as e:
-                logging.error(f"Error parsing or sending feed items: {e}")
-                await update.message.reply_text(get_message(lang, 'sub_feed_error'))
-
+                logging.error(e)
+            # 发送结束消息
+            await update.message.reply_text(get_message(lang, 'sub_end', channel_name))
     except Exception as e:
         logging.error(f"Error checking channel: {e}")
         await update.message.reply_text(get_message(lang, 'sub_channel_error', channel_name))
@@ -310,3 +239,90 @@ def close_all():
     except Exception as e:
         logging.error(f"Error closing database: {e}")
     logging.info("db close")
+
+
+async def process_sub(bot, subscription):
+    logging.info(subscription)
+    subscription_id = subscription['id']
+    chat_id = subscription['channel_id']
+    channel_name = subscription['channel_name']
+    feed_url = subscription['feed_url']
+
+    # 检查bot是否是频道管理员
+    chat = await bot.get_chat(channel_name)
+    logging.info(chat)
+    bot_member = await bot.get_chat_member(chat_id, bot.id)
+    if bot_member.status == ChatMember.ADMINISTRATOR:
+        items = await parse_feed(feed_url)
+        last_updated = subscription.get('updated_at')
+        if last_updated is None:
+            last_updated = 0
+        else:
+            last_updated = last_updated.timestamp()
+        logging.info(f"last_updated: {last_updated}")
+        item_latest = last_updated
+        for item in reversed(items):
+            # 获取item的pubDate时间戳
+            item_timestamp = item.pubDate
+            logging.info(f"pubDate: {item.pubDate}")
+
+            # 如果item的时间早于或等于上次更新时间，跳过
+            if item_timestamp <= last_updated:
+                continue
+
+            if item_latest < item_timestamp:
+                item_latest = item_timestamp
+            logging.info(f"item_latest: {item_latest}")
+            # 处理description中的图片
+            if item.description:
+                # 提取所有图片链接
+                image_urls = re.findall(
+                    r'<img[^>]+src="([^">]+)"', item.description)
+                # 先发一条单独的消息，只包含标题和链接
+                first_word = "美人图"  # 默认值
+                if item.title:
+                    # 使用正则表达式匹配第一个包含汉字、日语或字母数字的单词
+                    match = re.search(
+                        r'[\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FFa-zA-Z0-9]+', item.title)
+                    if match:
+                        first_word = match.group(0)
+
+                # 发布到Telegraph
+                url = f"https://t.me/{chat.username}"
+                logging.info(f"chat.title: {chat.title}, chat.url: {url}")
+                page_link, _ = publish_rss_item(item, chat.title, url)
+                logging.info(f"page_link: {page_link}")
+                tags = generate_chinese_tags(item.title)
+                # 发送标题和链接
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{item.title}\n\n{page_link}\n{tags}"
+                )
+                # 更新数据库中的updated_at时间戳
+                updated_at = datetime.fromtimestamp(item_latest)
+                get_db().update_subscription_timestamp(
+                    subscription_id, updated_at)
+                await asyncio.sleep(3)
+
+
+    else:
+        logging.info(
+            f"Bot is not an administrator in channel {channel_name} (ID: {chat_id})")
+
+
+async def scheduled_task():
+    while True:
+        try:
+            bot = tel_bots[0]
+            # 检查所有订阅
+            db = get_db()
+            subscriptions = db.get_subscriptions()
+            # 遍历所有订阅
+            for subscription in subscriptions:
+                # 处理订阅
+                await process_sub(bot, subscription)
+
+        except Exception as e:
+            logging.error(e)
+        finally:
+            await asyncio.sleep(4*60*60)

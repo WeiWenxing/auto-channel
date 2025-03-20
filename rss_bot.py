@@ -35,6 +35,7 @@ def main():
         if len(tokens) >= 1:
             for tel_token in tokens:
                 tasks.append(telegram_bot.start_task(tel_token))
+        tasks.append(telegram_bot.scheduled_task())
 
     try:
         loop.run_until_complete(asyncio.gather(*tasks))
