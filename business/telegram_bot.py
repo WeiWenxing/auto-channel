@@ -313,14 +313,17 @@ async def process_sub(bot, subscription):
 async def scheduled_task():
     while True:
         try:
-            bot = tel_bots[0]
             # 检查所有订阅
             db = get_db()
             subscriptions = db.get_subscriptions()
             # 遍历所有订阅
-            for subscription in subscriptions:
-                # 处理订阅
-                await process_sub(bot, subscription)
+            for bot in tel_bots:
+                for subscription in subscriptions:
+                    # 处理订阅
+                    try:
+                        await process_sub(bot, subscription)
+                    except Exception as e:
+                        logging.error(e)
 
         except Exception as e:
             logging.error(e)
