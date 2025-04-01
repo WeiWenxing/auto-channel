@@ -278,7 +278,8 @@ async def process_sub(bot, subscription):
                 # 提取所有图片链接
                 image_urls = re.findall(
                     r'<img[^>]+src="([^">]+)"', item.description)
-                # 先发一条单独的消息，只包含标题和链接
+
+                # 准备消息内容
                 first_word = "美人图"  # 默认值
                 if item.title:
                     # 使用正则表达式匹配第一个包含汉字、日语或字母数字的单词
@@ -293,11 +294,22 @@ async def process_sub(bot, subscription):
                 page_link, _ = publish_rss_item(item, chat.title, url)
                 logging.info(f"page_link: {page_link}")
                 tags = generate_chinese_tags(item.title)
-                # 发送标题和链接
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"{item.title}\n\n{page_link}\n{tags}"
-                )
+                text_msg=f"{item.title}\n\n{page_link}\n{tags}"
+
+                # 如果有图片，发送第一张图片并附带caption
+                if image_urls:
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=image_urls[0],
+                        caption=text_msg
+                    )
+                else:
+                    # 没有图片则保持原样发送文本
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=text_msg
+                    )
+
                 # 更新数据库中的updated_at时间戳
                 updated_at = datetime.fromtimestamp(item_latest)
                 get_db().update_subscription_timestamp(
