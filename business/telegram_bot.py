@@ -289,32 +289,37 @@ async def process_sub(bot, subscription):
                         first_word = match.group(0)
 
                 # 发布到Telegraph
-                url = f"https://t.me/{chat.username}"
-                logging.info(f"chat.title: {chat.title}, chat.url: {url}")
-                page_link, _ = publish_rss_item(item, chat.title, url)
-                logging.info(f"page_link: {page_link}")
-                tags = generate_chinese_tags(item.title)
-                text_msg=f"{item.title}\n\n{page_link}\n{tags}"
+                try:
+                    url = f"https://t.me/{chat.username}"
+                    logging.info(f"chat.title: {chat.title}, chat.url: {url}")
+                    page_link, _ = publish_rss_item(item, chat.title, url)
+                    logging.info(f"page_link: {page_link}")
+                    tags = generate_chinese_tags(item.title)
+                    text_msg=f"{item.title}\n\n{page_link}\n{tags}"
+                    logging.info(f"text_msg: {text_msg}")
 
-                # 如果有图片，发送第一张图片并附带caption
-                if image_urls:
-                    await bot.send_photo(
-                        chat_id=chat_id,
-                        photo=image_urls[0],
-                        caption=text_msg
-                    )
-                else:
-                    # 没有图片则保持原样发送文本
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=text_msg
-                    )
+                    # 如果有图片，发送第一张图片并附带caption
+                    if image_urls:
+                        await bot.send_photo(
+                            chat_id=chat_id,
+                            photo=image_urls[0],
+                            caption=text_msg
+                        )
+                    else:
+                        # 没有图片则保持原样发送文本
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=text_msg
+                        )
 
-                # 更新数据库中的updated_at时间戳
-                updated_at = datetime.fromtimestamp(item_latest)
-                get_db().update_subscription_timestamp(
-                    subscription_id, updated_at)
-                await asyncio.sleep(3)
+                    # 更新数据库中的updated_at时间戳
+                    updated_at = datetime.fromtimestamp(item_latest)
+                    get_db().update_subscription_timestamp(
+                        subscription_id, updated_at)
+                    await asyncio.sleep(3)
+                except Exception as e:
+                    logging.exception("An error occurred:")
+                    logging.error(e)
 
 
     else:
@@ -323,6 +328,7 @@ async def process_sub(bot, subscription):
 
 
 async def scheduled_task():
+    await asyncio.sleep(4*60)
     while True:
         try:
             # 检查所有订阅
