@@ -63,17 +63,30 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     手动发布RSS条目到频道
-    格式: /pub @channel_name <item>...</item>
+    格式: 发送包含 <item>...</item> 内容的 .txt 文件，并将 `/pub @channel_name` 作为文件标题 (Caption)。
     """
-    message_text = update.message.text.strip()
-    args = message_text.split()
-
-    # 1. 检查参数
-    if len(args) < 2:
-        await update.message.reply_text('/pub @channel_name <item>...</item>')
+    # 检查消息是否同时包含文档和标题 (因为过滤器只检查了文档)
+    if not update.message.document or not update.message.caption:
+        # 如果只收到文档但没有标题，或者反之，则忽略或回复提示
+        # 为了避免对非目标消息响应，这里选择直接返回忽略
+        logging.debug("Received document without caption or vice versa, ignoring.")
         return
 
-    # 2. 完整的频道检查
+    document = update.message.document
+    caption_text = update.message.caption.strip()
+    args = caption_text.split()
+
+    # 1. 检查标题格式和参数
+    if not caption_text.startswith('/pub') or len(args) < 2:
+        await update.message.reply_text('文件标题格式应为: /pub @channel_name')
+        return
+
+    # 2. 检查文件类型
+    if document.mime_type != 'text/plain':
+        await update.message.reply_text('请发送 .txt 格式的文件。')
+        return
+
+    # 3. 完整的频道检查
     channel_name = args[1]
     try:
         # 检查频道名格式
@@ -95,10 +108,21 @@ async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"无法访问 {channel_name}")
         return
 
-    # 3. 后续处理item内容
-    item_content = message_text[message_text.find('<item>'):]
+    # 4. 下载并读取文件内容
+    try:
+        file = await document.get_file()
+        item_content_bytes = await file.download_as_bytearray()
+        item_content = item_content_bytes.decode('utf-8')
+        # 确保内容包含 <item> 标签 (基本检查)
+        if '<item>' not in item_content or '</item>' not in item_content:
+             await update.message.reply_text('文件内容似乎不包含有效的 <item>...</item> 结构。')
+             return
+    except Exception as e:
+        logging.exception("下载或读取文件时出错")
+        await update.message.reply_text(f"处理文件时出错: {e}")
+        return
 
-    # 提取item标签内的内容
+    # 5. 提取item标签内的内容 (使用从文件获取的 item_content)
     title_match = re.search(r'<title>(.*?)</title>', item_content)
     logging.info(title_match)
     link_match = re.search(r'<link>(.*?)</link>', item_content)
@@ -292,7 +316,8 @@ async def run(token):
     application.add_handler(CommandHandler('help', help))
     application.add_handler(CommandHandler('sub', sub))
     application.add_handler(CommandHandler('unsub', unsub))
-    application.add_handler(CommandHandler('pub', pub))
+    # 使用 MessageHandler 监听任何文档，然后在 pub 函数内部检查标题和其他条件
+    application.add_handler(MessageHandler(filters.Document.ALL, pub))
 
     await application.initialize()
     await application.start()
@@ -430,3 +455,4 @@ async def scheduled_task():
             logging.error(e)
         finally:
             await asyncio.sleep(4*60*60)
+
