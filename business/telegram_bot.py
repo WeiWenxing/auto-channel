@@ -132,7 +132,9 @@ async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     for item_content in reversed(items_content):
         title_match = re.search(r'<title>(.*?)</title>', item_content)
+        logging.info(item_content)
         link_match = re.search(r'<link>(.*?)</link>', item_content)
+        logging.info(link_match)
         description_match = re.search(r'<description>(.*?)</description>', item_content, re.DOTALL)
 
         if not title_match or not description_match:
@@ -151,8 +153,11 @@ async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # 发布到Telegraph并发送到频道
             url = f"https://t.me/{chat.username}"
             page_link, _ = publish_rss_item(item, chat.title, url)
+            logging.info(page_link)
             tags = generate_chinese_tags(item.title)
+            logging.info(tags)
             text_msg = f"{item.title}\n\n{page_link}\n{tags}"
+            logging.info(text_msg)
 
             # 提取图片链接并发送消息
             image_urls = re.findall(r'<img[^>]+src="([^">]+)"', item.description)
