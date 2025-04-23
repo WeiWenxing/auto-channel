@@ -8,7 +8,7 @@ from datetime import datetime
 from kernel.lang_config import get_message
 from kernel.config import telegram_config, db_config
 from kernel.db_manager import init_db, get_db
-from kernel.feed_parser import parse_feed
+from kernel.feed_parser import FeedItem, parse_feed
 from kernel.utils import generate_chinese_tags
 from framework.telegraph_utils import publish_rss_item
 import re
@@ -16,6 +16,7 @@ import asyncio
 import logging
 import sys
 import os
+import aiohttp
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,7 +26,7 @@ commands = [
     BotCommand(command='help', description='Show help message'),
     BotCommand(command='sub', description='Subscribe to a channel'),
     BotCommand(command='unsub', description='Unsubscribe from a channel'),
-    # BotCommand(command='token', description='please input your replicate token, you should sign up and get your API token: https://replicate.com/account/api-tokens'),
+    BotCommand(command='pub', description='Publish RSS item to channel'),
 ]
 
 
@@ -57,6 +58,86 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_text += "\n" + get_message(lang, 'unsub_usage')
 
     await update.message.reply_text(help_text, disable_web_page_preview=True)
+
+
+async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    手动发布RSS条目到频道
+    格式: /pub @channel_name <item>...</item>
+    """
+    message_text = update.message.text.strip()
+    args = message_text.split()
+
+    # 1. 检查参数
+    if len(args) < 2:
+        await update.message.reply_text('/pub @channel_name <item>...</item>')
+        return
+
+    # 2. 完整的频道检查
+    channel_name = args[1]
+    try:
+        # 检查频道名格式
+        if not channel_name.startswith('@'):
+            await update.message.reply_text('频道名称必须以@开头')
+            return
+
+        # 检查频道访问权限
+        bot = context.bot
+        chat = await bot.get_chat(channel_name)
+        bot_member = await bot.get_chat_member(chat.id, bot.id)
+
+        if bot_member.status != ChatMember.ADMINISTRATOR:
+            await update.message.reply_text(f'我需要在{channel_name}中具有管理员权限')
+            return
+
+    except Exception as e:
+        logging.error(f"检查频道时出错: {e}")
+        await update.message.reply_text(f"无法访问 {channel_name}")
+        return
+
+    # 3. 后续处理item内容
+    item_content = message_text[message_text.find('<item>'):]
+
+    # 提取item标签内的内容
+    title_match = re.search(r'<title>(.*?)</title>', item_content)
+    logging.info(title_match)
+    link_match = re.search(r'<link>(.*?)</link>', item_content)
+    logging.info(link_match)
+    description_match = re.search(r'<description>(.*?)</description>', item_content)
+
+    if not title_match or not description_match:
+        await update.message.reply_text('item标签必须包含title和description')
+        return
+
+    # 构造FeedItem对象
+    item = FeedItem(
+        title=title_match.group(1),
+        description=description_match.group(1),
+        link=link_match.group(1) if link_match else "",
+        pubDate=int(datetime.now().timestamp())
+    )
+
+    try:
+        # 发布到Telegraph并发送到频道
+        url = f"https://t.me/{chat.username}"
+        page_link, _ = publish_rss_item(item, chat.title, url)
+        logging.info(page_link)
+        tags = generate_chinese_tags(item.title)
+        logging.info(tags)
+        text_msg = f"{item.title}\n\n{page_link}\n{tags}"
+
+        # 提取图片链接并发送消息
+        image_urls = re.findall(r'<img[^>]+src="([^">]+)"', item.description)
+        if image_urls:
+            await bot.send_photo(chat_id=chat.id, photo=image_urls[0], caption=text_msg)
+        else:
+            await bot.send_message(chat_id=chat.id, text=text_msg)
+
+        await update.message.reply_text(f"消息已发送到 {channel_name}")
+
+    except Exception as e:
+        logging.error(f"发布过程出错: {e}")
+        await update.message.reply_text(f"发布失败: {str(e)}")
 
 
 async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -210,6 +291,7 @@ async def run(token):
     application.add_handler(CommandHandler('help', help))
     application.add_handler(CommandHandler('sub', sub))
     application.add_handler(CommandHandler('unsub', unsub))
+    application.add_handler(CommandHandler('pub', pub))
 
     await application.initialize()
     await application.start()
