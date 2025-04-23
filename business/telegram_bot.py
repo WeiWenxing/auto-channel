@@ -67,8 +67,6 @@ async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     # 检查消息是否同时包含文档和标题 (因为过滤器只检查了文档)
     if not update.message.document or not update.message.caption:
-        # 如果只收到文档但没有标题，或者反之，则忽略或回复提示
-        # 为了避免对非目标消息响应，这里选择直接返回忽略
         logging.debug("Received document without caption or vice versa, ignoring.")
         return
 
@@ -123,46 +121,52 @@ async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # 5. 提取item标签内的内容 (使用从文件获取的 item_content)
-    title_match = re.search(r'<title>(.*?)</title>', item_content)
-    logging.info(title_match)
-    link_match = re.search(r'<link>(.*?)</link>', item_content)
-    logging.info(link_match)
-    # 使用 re.DOTALL 使 . 匹配包括换行符在内的所有字符
-    description_match = re.search(r'<description>(.*?)</description>', item_content, flags=re.DOTALL)
+    file = await document.get_file()
+    content_bytes = await file.download_as_bytearray()
+    content = content_bytes.decode('utf-8')
 
-    if not title_match or not description_match:
-        await update.message.reply_text('item标签必须包含title和description')
+    items_content = re.findall(r'<item>.*?</item>', content, re.DOTALL)
+    if not items_content:
+        await update.message.reply_text('文件中未找到有效的<item>标签')
         return
 
-    # 构造FeedItem对象
-    item = FeedItem(
-        title=title_match.group(1),
-        description=description_match.group(1),
-        link=link_match.group(1) if link_match else "",
-        pubDate=int(datetime.now().timestamp())
-    )
+    for item_content in reversed(items_content):
+        title_match = re.search(r'<title>(.*?)</title>', item_content)
+        link_match = re.search(r'<link>(.*?)</link>', item_content)
+        description_match = re.search(r'<description>(.*?)</description>', item_content, re.DOTALL)
 
-    try:
-        # 发布到Telegraph并发送到频道
-        url = f"https://t.me/{chat.username}"
-        page_link, _ = publish_rss_item(item, chat.title, url)
-        logging.info(page_link)
-        tags = generate_chinese_tags(item.title)
-        logging.info(tags)
-        text_msg = f"{item.title}\n\n{page_link}\n{tags}"
+        if not title_match or not description_match:
+            await update.message.reply_text('item标签必须包含title和description')
+            return
 
-        # 提取图片链接并发送消息
-        image_urls = re.findall(r'<img[^>]+src="([^">]+)"', item.description)
-        if image_urls:
-            await bot.send_photo(chat_id=chat.id, photo=image_urls[0], caption=text_msg)
-        else:
-            await bot.send_message(chat_id=chat.id, text=text_msg)
+        # 构造FeedItem对象
+        item = FeedItem(
+            title=title_match.group(1),
+            description=description_match.group(1),
+            link=link_match.group(1) if link_match else "",
+            pubDate=int(datetime.now().timestamp())
+        )
 
-        await update.message.reply_text(f"消息已发送到 {channel_name}")
+        try:
+            # 发布到Telegraph并发送到频道
+            url = f"https://t.me/{chat.username}"
+            page_link, _ = publish_rss_item(item, chat.title, url)
+            tags = generate_chinese_tags(item.title)
+            text_msg = f"{item.title}\n\n{page_link}\n{tags}"
 
-    except Exception as e:
-        logging.error(f"发布过程出错: {e}")
-        await update.message.reply_text(f"发布失败: {str(e)}")
+            # 提取图片链接并发送消息
+            image_urls = re.findall(r'<img[^>]+src="([^">]+)"', item.description)
+            if image_urls:
+                await bot.send_photo(chat_id=chat.id, photo=image_urls[0], caption=text_msg)
+            else:
+                await bot.send_message(chat_id=chat.id, text=text_msg)
+
+            await asyncio.sleep(3)  # 每条消息发送后等待3秒
+
+        except Exception as e:
+            logging.exception("发布过程出错:")  # 打印完整堆栈
+            await update.message.reply_text(f"发布失败: {str(e)}")
+            return  # 失败立即退出
 
 
 async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -455,4 +459,6 @@ async def scheduled_task():
             logging.error(e)
         finally:
             await asyncio.sleep(4*60*60)
+
+
 
