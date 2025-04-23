@@ -91,7 +91,7 @@ async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
     except Exception as e:
-        logging.error(f"检查频道时出错: {e}")
+        logging.exception("检查频道时出错")
         await update.message.reply_text(f"无法访问 {channel_name}")
         return
 
@@ -103,7 +103,8 @@ async def pub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.info(title_match)
     link_match = re.search(r'<link>(.*?)</link>', item_content)
     logging.info(link_match)
-    description_match = re.search(r'<description>(.*?)</description>', item_content)
+    # 使用 re.DOTALL 使 . 匹配包括换行符在内的所有字符
+    description_match = re.search(r'<description>(.*?)</description>', item_content, flags=re.DOTALL)
 
     if not title_match or not description_match:
         await update.message.reply_text('item标签必须包含title和description')
