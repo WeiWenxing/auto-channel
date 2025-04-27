@@ -248,7 +248,7 @@ async def sub(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # 发送结束消息
             await update.message.reply_text(get_message(lang, 'sub_end', channel_name))
     except Exception as e:
-        logging.error(f"Error checking channel: {e}")
+        logging.exception("Error checking channel:")
         await update.message.reply_text(get_message(lang, 'sub_channel_error', channel_name))
 
 
